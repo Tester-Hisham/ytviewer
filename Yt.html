@@ -23,9 +23,58 @@
     --muted: #666;
     --brand: #ff33cc;
   }
-  * { box-sizing: border-box }
-  html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif; transition: all 0.3s; }
-  body { background: linear-gradient(180deg, var(--bg), #0b0d12); color: var(--text); }
+  * { box-sizing: border-box; }
+  html, body { 
+    height: 100%; margin: 0; 
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif; 
+    transition: all 0.3s; 
+  }
+
+  /* BODY + Liquid-Glass Background */
+  body {
+    background: linear-gradient(-45deg, #0f1115, #1a1c26, #0b0d12, #161822);
+    background-size: 400% 400%;
+    animation: gradientBG 20s ease infinite;
+    color: var(--text);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  @keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  body::before {
+    content: '';
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    background: radial-gradient(circle at 20% 20%, #ff33cc44, transparent 30%),
+                radial-gradient(circle at 80% 80%, #3399ff44, transparent 30%),
+                radial-gradient(circle at 50% 50%, #33ffcc44, transparent 30%);
+    filter: blur(150px);
+    animation: moveBG 30s linear infinite;
+    z-index: -1;
+    pointer-events: none;
+  }
+  @keyframes moveBG {
+    0% { transform: translate(0,0) rotate(0deg); }
+    50% { transform: translate(50px, -50px) rotate(45deg); }
+    100% { transform: translate(0,0) rotate(0deg); }
+  }
+  [data-theme="light"] body {
+    background: linear-gradient(-45deg, #f2f2f2, #e0e0e0, #f5f5f5, #ededed);
+  }
+  [data-theme="light"] body::before {
+    background: radial-gradient(circle at 20% 20%, #ff33cc22, transparent 30%),
+                radial-gradient(circle at 80% 80%, #3399ff22, transparent 30%),
+                radial-gradient(circle at 50% 50%, #33ffcc22, transparent 30%);
+  }
+
+  /* APP STYLING */
   .app { display: grid; grid-template-rows: auto 1fr; gap: 20px; max-width: 1300px; margin: 0 auto; padding: 20px; }
   .bar { display: grid; grid-template-columns: 1fr auto auto auto auto auto auto; gap: 12px; align-items: center; background: var(--panel); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(30px); }
   .input { display: flex; gap: 12px; align-items: center; background: var(--panel-2); border: 1px solid rgba(255,255,255,.08); padding: 12px 16px; border-radius: 20px; backdrop-filter: blur(35px); }
@@ -96,7 +145,7 @@ const playlistEl=document.getElementById('playlist');
 const playlistSelect=document.getElementById('playlistSelect');
 let player;
 
-// Toast function
+// Toast
 function notify(msg,dur=2000){
   const toast=document.createElement('div');
   toast.textContent=msg;
@@ -121,7 +170,7 @@ function showVolume(vol){
   volumeOverlay._timeout = setTimeout(()=>{ volumeOverlay.style.opacity = 0; }, 1000);
 }
 
-// State load/save
+// State
 function saveState(){ localStorage.setItem('ytState', JSON.stringify(state)); }
 function loadState(){ 
   const s=localStorage.getItem('ytState');
@@ -132,7 +181,7 @@ function loadState(){
   if(state.idx>=0) playAt(state.idx);
 }
 
-// Playlist select
+// Playlist
 function renderPlaylistSelect(){
   playlistSelect.innerHTML='';
   for(const name in state.playlists){
