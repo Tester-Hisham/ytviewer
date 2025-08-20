@@ -51,7 +51,7 @@ body {
 
 /* App UI */
 .app { position: relative; z-index: 1; display: grid; grid-template-rows: auto 1fr; gap: 20px; max-width: 1300px; margin: 0 auto; padding: 20px; }
-.bar { display: grid; grid-template-columns: 1fr auto auto auto auto auto auto auto; gap: 12px; align-items: center; background: var(--panel); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(30px); }
+.bar { display: grid; grid-template-columns: 1fr auto auto auto auto auto auto auto auto; gap: 12px; align-items: center; background: var(--panel); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(30px); }
 .input { display: flex; gap: 12px; align-items: center; background: var(--panel-2); border: 1px solid rgba(255,255,255,.08); padding: 12px 16px; border-radius: 20px; backdrop-filter: blur(35px); }
 .input input { flex: 1; border: 0; outline: none; background: transparent; color: var(--text); font-size: 16px; }
 .btn { border: 0; border-radius: 20px; padding: 12px 18px; background: var(--brand); color: #fff; font-weight: 700; cursor: pointer; transition: all 0.3s; }
@@ -130,6 +130,7 @@ select { border-radius: 12px; padding: 6px 12px; background: var(--panel-2); col
     <button class="btn ghost" id="deletePlaylistBtn">Delete</button>
     <button class="btn ghost" id="themeBtn">🌗</button>
     <button class="btn ghost" id="micBtn">🎤 Mic React</button>
+    <button class="btn ghost" id="videoReactBtn">📺 Video React</button>
     <span id="reactModeLabel" class="off"><span class="dot"></span>(off)</span>
   </div>
 
@@ -159,6 +160,8 @@ const blobs = [...document.querySelectorAll('.blob')];
 let phases = blobs.map(()=> Math.random()*Math.PI*2);
 let hues = [310,190,260];
 let analyser=null, dataArray=null;
+let reactMode="off"; // off | mic | video
+let player;
 
 function avg(arr, start, count){ let s=0; for(let i=start;i<start+count;i++) s+=arr[i]||0; return count?s/count:0; }
 
@@ -166,11 +169,12 @@ function animateBlobs(){
   requestAnimationFrame(animateBlobs);
   const t = performance.now()*0.001;
   blobs.forEach((b,i)=>{
-    const phase = phases[i]+=0.015+i*0.005;
+    phases[i]+=0.015+i*0.005;
     const floatX = Math.sin(t + i*0.7)*(25+i*10);
     const floatY = Math.cos(t*1.2 + i*0.9)*(20+i*8);
     let scale=1,hue=hues[i];
-    if(analyser && dataArray){
+
+    if(analyser && dataArray && reactMode==="mic"){
       analyser.getByteFrequencyData(dataArray);
       const len=dataArray.length;
       const third=Math.floor(len/3);
@@ -183,17 +187,25 @@ function animateBlobs(){
   });
 
   // Dot Pulse
-  if(analyser && dataArray){
+  const dot=document.querySelector("#reactModeLabel .dot");
+  if(!dot) return;
+  if(reactMode==="mic" && analyser && dataArray){
     analyser.getByteFrequencyData(dataArray);
     let bass=0;
     for(let i=0;i<dataArray.length*0.15;i++) bass+=dataArray[i];
     bass=bass/(dataArray.length*0.15);
-    const dot=document.querySelector("#reactModeLabel .dot");
-    if(dot){
-      const s=1+(bass/255)*1.2;
-      dot.style.transform=`scale(${s})`;
-      dot.style.boxShadow=`0 0 ${6+bass/20}px currentColor`;
-    }
+    const s=1+(bass/255)*1.2;
+    dot.style.transform=`scale(${s})`;
+    dot.style.boxShadow=`0 0 ${6+bass/20}px currentColor`;
+  } else if(reactMode==="video" && player && player.getCurrentTime){
+    const tt=player.getCurrentTime();
+    const bass=(Math.sin(tt*6)+1)*128; // 0..255
+    const s=1+(bass/255)*1.2;
+    dot.style.transform=`scale(${s})`;
+    dot.style.boxShadow=`0 0 ${6+bass/20}px currentColor`;
+  } else {
+    dot.style.transform=`scale(1)`;
+    dot.style.boxShadow=`none`;
   }
 }
 animateBlobs();
@@ -208,6 +220,30 @@ document.addEventListener('pointermove',e=>{
   });
 });
 
+// ======= React Mode Controls =======
+function updateReactLabel(){
+  const el=document.getElementById('reactModeLabel');
+  if(reactMode==="off"){ el.className='off'; el.innerHTML='<span class="dot"></span>(off)'; }
+  if(reactMode==="mic"){ el.className='mic'; el.innerHTML='<span class="dot"></span>(mic)'; }
+  if(reactMode==="video"){ el.className='video'; el.innerHTML='<span class="dot"></span>(video)'; }
+}
+
+document.getElementById('micBtn').onclick=async()=>{
+  if(reactMode==="mic"){ reactMode="off"; analyser=null; updateReactLabel(); return; }
+  const stream=await navigator.mediaDevices.getUserMedia({ audio:true });
+  const ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  analyser=ctx.createAnalyser();
+  analyser.fftSize=512;
+  dataArray=new Uint8Array(analyser.frequencyBinCount);
+  src.connect(analyser);
+  reactMode="mic"; updateReactLabel();
+};
+document.getElementById('videoReactBtn').onclick=()=>{
+  reactMode = (reactMode==="video") ? "off" : "video";
+  updateReactLabel();
+};
+
 // ======== App / Playlist / Player ==========
 const state={playlists:{"Default":[]},currentPlaylist:"Default",idx:-1,sidebarMinimized:false,positions:{}};
 const itemsEl=document.getElementById('items');
@@ -215,7 +251,6 @@ const urlEl=document.getElementById('url');
 const placeholder=document.getElementById('placeholder');
 const playlistEl=document.getElementById('playlist');
 const playlistSelect=document.getElementById('playlistSelect');
-let player;
 
 // Toast
 function notify(msg,dur=2000){
@@ -272,20 +307,24 @@ document.getElementById('minBtn').onclick=()=>{ playlistEl.classList.toggle('min
 document.getElementById('shuffleBtn').onclick=()=>{ shuffle(state.playlists[state.currentPlaylist]); renderList(); notify("Playlist shuffled"); };
 document.getElementById('clearBtn').onclick=()=>{ state.playlists[state.currentPlaylist]=[]; state.idx=-1; renderList(); if(player) player.stopVideo(); placeholder.style.display='grid'; notify("Playlist cleared"); saveState(); };
 
-document.getElementById('addBtn').onclick=async()=>{
-  const raw=urlEl.value.trim(); if(!raw) return;
-  const id=extractVideoId(raw); if(!id) return alert('Invalid YouTube video ID or URL.');
-  const title=await fetchMeta(id);
-  state.playlists[state.currentPlaylist].push({id,title});
-  urlEl.value=''; renderList(); if(state.idx===-1) playAt(0);
-  notify("Added: "+title); saveState();
-};
+document.getElementById('addBtn').onclick=addFromInput;
 document.getElementById('pasteBtn').onclick=async()=>{
-  try{ const text=await navigator.clipboard.readText(); if(!text.trim()) return alert('Clipboard empty'); urlEl.value=text; document.getElementById('addBtn').click(); }
+  try{ const text=await navigator.clipboard.readText(); if(!text.trim()) return alert('Clipboard empty'); urlEl.value=text; addFromInput(); }
   catch{ alert('Clipboard access denied'); }
 };
-document.getElementById('nextBtn').onclick=()=>next();
-document.getElementById('prevBtn').onclick=()=>prev();
+urlEl.addEventListener('keydown', e => { if(e.key==='Enter') addFromInput(); });
+
+function addFromInput(){
+  const raw=urlEl.value.trim(); if(!raw) return;
+  const {id, start} = extractVideoId(raw) || {};
+  if(!id) return alert('Invalid YouTube URL or ID.');
+  fetchMeta(id).then(title=>{
+    state.playlists[state.currentPlaylist].push({id,title,start: start||0});
+    urlEl.value=''; renderList();
+    if(state.idx===-1) playAt(0);
+    notify("Added: "+title); saveState();
+  });
+}
 
 // Fetch video title
 async function fetchMeta(id){ 
@@ -301,30 +340,100 @@ function renderList(){
   list.forEach((v,i)=>{
     const row=document.createElement('div');
     row.className='item'+(i===state.idx?' active':''); row.draggable=true; row.dataset.index=i; row.onclick=()=>playAt(i);
-    row.innerHTML=`<img class="thumb" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg" alt="thumb"/><div><div class="title">${v.title}</div><div class="meta">ID: ${v.id}</div></div><button class="x" onclick="event.stopPropagation(); removeAt(${i})">×</button>`;
+    row.innerHTML=`<img class="thumb" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg" alt="thumb" onerror="this.style.opacity=0.3"/><div><div class="title">${v.title}</div><div class="meta">ID: ${v.id}${v.start?` • start ${v.start}s`:''}</div></div><button class="x" onclick="event.stopPropagation(); removeAt(${i})">×</button>`;
+    // minimal drag & drop
+    row.ondragstart = e => { e.dataTransfer.setData('index', i); row.classList.add('dragging'); };
+    row.ondragend   = () => row.classList.remove('dragging');
     itemsEl.appendChild(row);
   });
+  itemsEl.ondragover = e => e.preventDefault();
+  itemsEl.ondrop = e => {
+    const from = +e.dataTransfer.getData('index');
+    const to = +[...itemsEl.children].indexOf(e.target.closest('.item'));
+    const arr = state.playlists[state.currentPlaylist];
+    if(from>=0 && to>=0 && from!==to){ arr.splice(to, 0, arr.splice(from, 1)[0]); renderList(); saveState(); }
+  };
 }
-function removeAt(i){ state.playlists[state.currentPlaylist].splice(i,1); if(i===state.idx){ state.idx=-1; if(player) player.stopVideo(); placeholder.style.display='grid'; } renderList(); saveState(); notify("Removed video"); }
+function removeAt(i){ 
+  state.playlists[state.currentPlaylist].splice(i,1); 
+  if(i===state.idx){ state.idx=-1; if(player) player.stopVideo(); placeholder.style.display='grid'; } 
+  renderList(); saveState(); notify("Removed video"); 
+}
 function playAt(i){ 
   const list=state.playlists[state.currentPlaylist]; if(!list[i]) return;
   state.idx=i;
-  if(!player) initPlayer(list[i].id);
-  else player.loadVideoById(list[i].id);
+  const v=list[i];
+  if(!player) initPlayer(v.id, v.start||0);
+  else player.loadVideoById({videoId:v.id, startSeconds: v.start||0});
   placeholder.style.display='none';
   renderList(); saveState();
 }
 function next(){ const l=state.playlists[state.currentPlaylist]; if(!l.length) return; playAt((state.idx+1)%l.length); }
 function prev(){ const l=state.playlists[state.currentPlaylist]; if(!l.length) return; playAt((state.idx-1+l.length)%l.length); }
+document.getElementById('nextBtn').onclick=next;
+document.getElementById('prevBtn').onclick=prev;
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
 
-function extractVideoId(url){ 
-  const reg=/v=([a-zA-Z0-9_-]{11})|youtu\.be\/([a-zA-Z0-9_-]{11})/; 
-  const m=url.match(reg); if(!m) return null; return m[1]||m[2];
+/* ---------- Robust YouTube ID + start-time extractor ----------
+   Handles:
+   - https://youtube.com/shorts/VIDEOID
+   - https://youtu.be/VIDEOID?t=90
+   - https://www.youtube.com/watch?v=VIDEOID&start=90
+   - https://www.youtube.com/embed/VIDEOID
+   - Raw 11-char IDs
+*/
+function extractVideoId(input){
+  // raw ID?
+  const raw = input.trim();
+  const mId = raw.match(/^[A-Za-z0-9_-]{11}$/);
+  if(mId) return { id: mId[0], start: 0 };
+
+  let url;
+  try { url = new URL(raw); } catch { return null; }
+
+  // youtu.be short links
+  if(url.hostname.replace(/^www\./,'') === 'youtu.be'){
+    const id = url.pathname.split('/')[1]?.slice(0,11);
+    const start = parseStart(url);
+    return id && id.length===11 ? { id, start } : null;
+  }
+
+  // Any youtube.com domain (www, m, music still work for parsing)
+  if(/(^|\.)youtube\.com$/i.test(url.hostname)){
+    // watch?v=
+    const vParam = url.searchParams.get('v');
+    if(vParam && vParam.length===11) return { id: vParam, start: parseStart(url) };
+
+    // /shorts/ID, /embed/ID, /live/ID, /v/ID
+    const segs = url.pathname.split('/').filter(Boolean);
+    const keys = ['shorts','embed','live','v'];
+    for(let k of keys){
+      const idx = segs.indexOf(k);
+      if(idx !== -1 && segs[idx+1] && segs[idx+1].length>=11){
+        const id = segs[idx+1].slice(0,11);
+        return { id, start: parseStart(url) };
+      }
+    }
+  }
+
+  return null;
+}
+
+// Parse t=1m30s, t=90, start=90
+function parseStart(url){
+  const t = url.searchParams.get('t') || url.searchParams.get('start');
+  if(!t) return 0;
+  if(/^\d+$/.test(t)) return parseInt(t,10);
+  // format like 1h2m3s
+  let sec = 0;
+  const h = /(\d+)h/.exec(t); if(h) sec += +h[1]*3600;
+  const m = /(\d+)m/.exec(t); if(m) sec += +m[1]*60;
+  const s = /(\d+)s/.exec(t); if(s) sec += +s[1];
+  return sec || 0;
 }
 
 // ======= YouTube Player =========
-function initPlayer(id){
+function initPlayer(id, start=0){
   const tag = document.createElement('script');
   tag.src="https://www.youtube.com/iframe_api";
   document.body.appendChild(tag);
@@ -333,39 +442,13 @@ function initPlayer(id){
       height: '100%',
       width: '100%',
       videoId: id,
-      playerVars: { autoplay:1, controls:1, modestbranding:1, rel:0 },
+      playerVars: { autoplay:1, controls:1, modestbranding:1, rel:0, playsinline:1, start },
       events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
     });
   };
 }
-function onPlayerReady(event){ event.target.playVideo(); initAudioContext(); }
+function onPlayerReady(event){ event.target.playVideo(); }
 function onPlayerStateChange(event){ if(event.data===YT.PlayerState.ENDED) next(); }
-
-// ======= Audio Context for React Dot =========
-function initAudioContext(){
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AudioContext();
-  const src = ctx.createMediaElementSource(player.getIframe());
-  analyser = ctx.createAnalyser();
-  analyser.fftSize=512;
-  dataArray=new Uint8Array(analyser.frequencyBinCount);
-  src.connect(analyser);
-  analyser.connect(ctx.destination);
-}
-
-// Mic React Mode
-document.getElementById('micBtn').onclick=async()=>{
-  if(analyser){ analyser=null; document.getElementById('reactModeLabel').className='off'; document.getElementById('reactModeLabel').innerHTML='<span class="dot"></span>(off)'; return; }
-  const stream=await navigator.mediaDevices.getUserMedia({ audio:true });
-  const ctx = new (window.AudioContext||window.webkitAudioContext)();
-  const src = ctx.createMediaStreamSource(stream);
-  analyser=ctx.createAnalyser();
-  analyser.fftSize=512;
-  dataArray=new Uint8Array(analyser.frequencyBinCount);
-  src.connect(analyser);
-  document.getElementById('reactModeLabel').className='mic';
-  document.getElementById('reactModeLabel').innerHTML='<span class="dot"></span>(mic)';
-}
 
 // Initialize
 loadState();
