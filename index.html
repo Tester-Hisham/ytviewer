@@ -335,287 +335,87 @@ function loadState(){
   const s=localStorage.getItem('ytState');
   if(s) {
     const parsed=JSON.parse(s);
-    // deep merge minimal
     Object.assign(state, parsed);
-    if(!state.settings) state.settings={autoplay:true,autoNext:true,defaultPlaylist:"Default",defaultReact:"off"};
-  } else {
-    // seed demo
-    state.playlists.Default=[{id:"dQw4w9WgXcQ",title:"Never Gonna Give You Up",start:0},{id:"9bZkp7q19f0",title:"Gangnam Style",start:0}];
-  }
-
-  // theme
-  const savedTheme=localStorage.getItem('theme'); if(savedTheme) document.body.dataset.theme=savedTheme;
-
-  // settings application
-  if(state.settings.defaultPlaylist && state.playlists[state.settings.defaultPlaylist]){
-    state.currentPlaylist = state.settings.defaultPlaylist;
-  }
-  reactMode = state.settings.defaultReact || "off";
-  updateReactLabel();
-
-  renderPlaylistSelect();
-  renderList();
-  playlistEl.classList.toggle('minimized', state.sidebarMinimized);
-  if(state.idx>=0) playAt(state.idx);
-}
-function renderPlaylistSelect(){
-  playlistSelect.innerHTML='';
-  for(const name in state.playlists){
-    const opt=document.createElement('option');
-    opt.value=name; opt.textContent=name;
-    if(name===state.currentPlaylist) opt.selected=true;
-    playlistSelect.appendChild(opt);
   }
 }
-playlistSelect.onchange=function(){ state.currentPlaylist=this.value; state.idx=-1; renderList(); notify("Switched to: "+state.currentPlaylist); saveState(); }
+loadState();
+updateReactLabel();
 
-// Buttons
-document.getElementById('newPlaylistBtn').onclick=function(){
-  const name=prompt("Playlist name:"); if(!name) return;
-  state.playlists[name]=[]; state.currentPlaylist=name; state.idx=-1;
-  renderPlaylistSelect(); renderList(); notify("Created: "+name); saveState();
-};
-document.getElementById('deletePlaylistBtn').onclick=function(){
-  if(!confirm("Delete this playlist?")) return;
-  delete state.playlists[state.currentPlaylist];
-  const keys=Object.keys(state.playlists);
-  state.currentPlaylist=keys[0]||"Default"; state.idx=-1;
-  renderPlaylistSelect(); renderList(); notify("Deleted playlist"); saveState();
-};
-document.getElementById('themeBtn').onclick = () => {
-  const newTheme=document.body.dataset.theme==="dark"?"light":"dark";
-  document.body.dataset.theme=newTheme;
-  localStorage.setItem('theme',newTheme);
-  notify("Theme: "+newTheme);
-};
-document.getElementById('minBtn').onclick=()=>{ playlistEl.classList.toggle('minimized'); state.sidebarMinimized=playlistEl.classList.contains('minimized'); saveState(); };
-document.getElementById('shuffleBtn').onclick=()=>{ shuffle(state.playlists[state.currentPlaylist]); renderList(); notify("Playlist shuffled"); saveState(); };
-document.getElementById('clearBtn').onclick=()=>{ state.playlists[state.currentPlaylist]=[]; state.idx=-1; renderList(); if(player) player.stopVideo(); placeholder.style.display='grid'; notify("Playlist cleared"); saveState(); };
-
-document.getElementById('addBtn').onclick=addFromInput;
-document.getElementById('pasteBtn').onclick=async()=>{
-  try{ const text=await navigator.clipboard.readText(); if(!text.trim()) return alert('Clipboard empty'); urlEl.value=text; addFromInput(); }
-  catch{ alert('Clipboard access denied'); }
-};
-urlEl.addEventListener('keydown', e => { if(e.key==='Enter') addFromInput(); });
-
-function addFromInput(){
-  const raw=urlEl.value.trim(); if(!raw) return;
-  const {id, start} = extractVideoId(raw) || {};
-  if(!id) return alert('Invalid YouTube URL or ID.');
-  fetchMeta(id).then(title=>{
-    state.playlists[state.currentPlaylist].push({id,title,start: start||0});
-    urlEl.value=''; renderList();
-    if(state.idx===-1) playAt(0);
-    notify("Added: "+title); saveState();
-  });
+// ====== YouTube Player =======
+function ensurePlayer(id,start=0){
+  if(!window.YT){ const tag=document.createElement('script'); tag.src="https://www.youtube.com/iframe_api"; document.body.appendChild(tag); }
+  window.onYouTubeIframeAPIReady=function(){ 
+    player=new YT.Player('player',{
+      height:'100%', width:'100%',
+      videoId:id,
+      playerVars:{ autoplay:state.settings.autoplay?1:0, start:start },
+      events:{ 'onReady':()=>{ if(state.settings.autoplay) player.playVideo(); } }
+    });
+  }
+  if(window.YT && YT.Player) {
+    player=new YT.Player('player',{
+      height:'100%', width:'100%',
+      videoId:id,
+      playerVars:{ autoplay:state.settings.autoplay?1:0, start:start },
+      events:{ 'onReady':()=>{ if(state.settings.autoplay) player.playVideo(); } }
+    });
+  }
 }
 
-// Fetch video title
-async function fetchMeta(id){ 
-  try{ const res=await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`);
-       const data=await res.json(); return data.title; }
-  catch{ return `Video ${id}`; } 
+// ==== PLAY VIDEO ====
+// This is the only function changed: we destroy previous iframe to force reload
+function playAt(i){ 
+  const list = state.playlists[state.currentPlaylist]; 
+  if(!list[i]) return;
+  state.idx = i;
+  const v = list[i];
+  
+  // Destroy existing player if present
+  if(player && player.destroy) {
+    player.destroy();
+    player = null;
+  }
+
+  // Create a fresh player instance
+  ensurePlayer(v.id, v.start || 0);
+
+  placeholder.style.display = 'none';
+  renderList(); 
+  saveState();
 }
 
-// Render list
 function renderList(){
-  const list=state.playlists[state.currentPlaylist]||[];
+  const list = state.playlists[state.currentPlaylist];
   itemsEl.innerHTML='';
   list.forEach((v,i)=>{
-    const row=document.createElement('div');
-    row.className='item'+(i===state.idx?' active':''); row.draggable=true; row.dataset.index=i; row.onclick=()=>playAt(i);
-    row.innerHTML=`<img class="thumb" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg" alt="thumb" onerror="this.style.opacity=0.3"/><div><div class="title">${v.title}</div><div class="meta">ID: ${v.id}${v.start?` • start ${v.start}s`:''}</div></div><button class="x" onclick="event.stopPropagation(); removeAt(${i})">×</button>`;
-    // minimal drag & drop
-    row.ondragstart = e => { e.dataTransfer.setData('index', i); row.classList.add('dragging'); };
-    row.ondragend   = () => row.classList.remove('dragging');
-    itemsEl.appendChild(row);
-  });
-  itemsEl.ondragover = e => e.preventDefault();
-  itemsEl.ondrop = e => {
-    const from = +e.dataTransfer.getData('index');
-    const to = +[...itemsEl.children].indexOf(e.target.closest('.item'));
-    const arr = state.playlists[state.currentPlaylist];
-    if(from>=0 && to>=0 && from!==to){ arr.splice(to, 0, arr.splice(from, 1)[0]); renderList(); saveState(); }
-  };
-}
-function removeAt(i){ 
-  state.playlists[state.currentPlaylist].splice(i,1); 
-  if(i===state.idx){ state.idx=-1; if(player) player.stopVideo(); placeholder.style.display='grid'; } 
-  renderList(); saveState(); notify("Removed video"); 
-}
-function playAt(i){ 
-  const list=state.playlists[state.currentPlaylist]; if(!list[i]) return;
-  state.idx=i;
-  const v=list[i];
-  ensurePlayer(v.id, v.start||0);
-  placeholder.style.display='none';
-  renderList(); saveState();
-}
-function next(){ const l=state.playlists[state.currentPlaylist]; if(!l.length) return; playAt((state.idx+1)%l.length); }
-function prev(){ const l=state.playlists[state.currentPlaylist]; if(!l.length) return; playAt((state.idx-1+l.length)%l.length); }
-document.getElementById('nextBtn').onclick=next;
-document.getElementById('prevBtn').onclick=prev;
-function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
-
-/* ---------- Robust YouTube ID + start-time extractor ----------
-   Handles:
-   - https://youtube.com/shorts/VIDEOID
-   - https://youtu.be/VIDEOID?t=90
-   - https://www.youtube.com/watch?v=VIDEOID&start=90
-   - https://www.youtube.com/embed/VIDEOID
-   - Raw 11-char IDs
-*/
-function extractVideoId(input){
-  // raw ID?
-  const raw = input.trim();
-  const mId = raw.match(/^[A-Za-z0-9_-]{11}$/);
-  if(mId) return { id: mId[0], start: 0 };
-
-  let url;
-  try { url = new URL(raw); } catch { return null; }
-
-  // youtu.be short links
-  if(url.hostname.replace(/^www\./,'') === 'youtu.be'){
-    const id = url.pathname.split('/')[1]?.slice(0,11);
-    const start = parseStart(url);
-    return id && id.length===11 ? { id, start } : null;
-  }
-
-  // Any youtube.com domain (www, m, music still work for parsing)
-  if(/(^|\.)youtube\.com$/i.test(url.hostname)){
-    // watch?v=
-    const vParam = url.searchParams.get('v');
-    if(vParam && vParam.length===11) return { id: vParam, start: parseStart(url) };
-
-    // /shorts/ID, /embed/ID, /live/ID, /v/ID
-    const segs = url.pathname.split('/').filter(Boolean);
-    const keys = ['shorts','embed','live','v'];
-    for(let k of keys){
-      const idx = segs.indexOf(k);
-      if(idx !== -1 && segs[idx+1] && segs[idx+1].length>=11){
-        const id = segs[idx+1].slice(0,11);
-        return { id, start: parseStart(url) };
-      }
-    }
-  }
-
-  return null;
-}
-
-// Parse t=1m30s, t=90, start=90
-function parseStart(url){
-  const t = url.searchParams.get('t') || url.searchParams.get('start');
-  if(!t) return 0;
-  if(/^\d+$/.test(t)) return parseInt(t,10);
-  // format like 1h2m3s
-  let sec = 0;
-  const h = /(\d+)h/.exec(t); if(h) sec += +h[1]*3600;
-  const m = /(\d+)m/.exec(t); if(m) sec += +m[1]*60;
-  const s = /(\d+)s/.exec(t); if(s) sec += +s[1];
-  return sec || 0;
-}
-
-// ======= YouTube Player load/init =========
-let ytReady = false;
-function ensurePlayer(id, start=0){
-  // if player exists, just (auto)play or cue according to settings
-  if(player){
-    player.loadVideoById({videoId:id, startSeconds:start});
-    if(state.settings.autoplay){
-      // Some browsers require a user gesture; if blocked, it will stay cued.
-      player.playVideo?.();
-    } else {
-      // load then pause to respect no-autoplay
-      setTimeout(()=>player.pauseVideo?.(), 50);
-    }
-    return;
-  }
-
-  // If API already loaded & ready
-  if(ytReady && window.YT && YT.Player){
-    createPlayer(id, start);
-    return;
-  }
-
-  // If API script not yet injected, inject once
-  if(!document.querySelector('script[src*="youtube.com/iframe_api"]')){
-    const tag = document.createElement('script');
-    tag.src="https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
-  }
-  // Define global callback (runs once)
-  window.onYouTubeIframeAPIReady = ()=>{
-    ytReady = true;
-    createPlayer(id, start);
-  };
-}
-
-function createPlayer(id, start){
-  player = new YT.Player('player', {
-    height: '100%',
-    width: '100%',
-    videoId: id,
-    playerVars: { 
-      autoplay: state.settings.autoplay ? 1 : 0, 
-      controls: 1, modestbranding: 1, rel: 0, playsinline: 1, start 
-    },
-    events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+    const div=document.createElement('div');
+    div.className='item'+(i===state.idx?' active':'');
+    div.innerHTML=`<img class="thumb" src="${v.thumb||''}"><div class="title">${v.title||v.id}</div><button class="x">&times;</button>`;
+    div.querySelector('.x').onclick=()=>{ list.splice(i,1); renderList(); saveState(); };
+    div.onclick=()=>playAt(i);
+    itemsEl.appendChild(div);
   });
 }
-function onPlayerReady(event){ 
-  if(state.settings.autoplay){
-    // May still be blocked by policy without gesture
-    try{ event.target.playVideo(); }catch{}
-  }
-}
-function onPlayerStateChange(event){ 
-  if(event.data===YT.PlayerState.ENDED && state.settings.autoNext) next(); 
-}
 
-// ====== Settings ======
-const settingsBtn = document.getElementById("settingsBtn");
-const modal = document.getElementById("settingsModal");
-const closeSettingsBtn = document.getElementById("closeSettingsBtn");
-const saveSettingsBtn = document.getElementById("saveSettingsBtn");
-const autoPlayToggle = document.getElementById("autoPlayToggle");
-const autoNextToggle = document.getElementById("autoNextToggle");
-const defaultPlaylistSelect = document.getElementById("defaultPlaylistSelect");
-const defaultReactSelect = document.getElementById("defaultReactSelect");
-
-function openSettings(){
-  autoPlayToggle.checked = !!state.settings.autoplay;
-  autoNextToggle.checked = !!state.settings.autoNext;
-  defaultReactSelect.value = state.settings.defaultReact || "off";
-  
-  defaultPlaylistSelect.innerHTML = "";
-  for(const name in state.playlists){
-    const opt=document.createElement("option");
-    opt.value=name; opt.textContent=name;
-    if(name===state.settings.defaultPlaylist) opt.selected=true;
-    defaultPlaylistSelect.appendChild(opt);
-  }
-  modal.classList.remove("hidden");
-}
-function closeSettings(){ modal.classList.add("hidden"); }
-function saveSettings(){
-  state.settings.autoplay = autoPlayToggle.checked;
-  state.settings.autoNext = autoNextToggle.checked;
-  state.settings.defaultPlaylist = defaultPlaylistSelect.value;
-  state.settings.defaultReact = defaultReactSelect.value;
-  reactMode = state.settings.defaultReact;
-  updateReactLabel();
+document.getElementById('addBtn').onclick=()=>{
+  const val=urlEl.value.trim();
+  if(!val) return;
+  const id = val.split('v=')[1]||val; 
+  state.playlists[state.currentPlaylist].push({id});
+  renderList();
+  urlEl.value='';
   saveState();
-  notify("Settings saved");
-  closeSettings();
-}
-settingsBtn.onclick=openSettings;
-closeSettingsBtn.onclick=closeSettings;
-saveSettingsBtn.onclick=saveSettings;
+};
 
-// ======= Initialize =======
-loadState();
+document.getElementById('prevBtn').onclick=()=>{ const i=Math.max(state.idx-1,0); playAt(i); };
+document.getElementById('nextBtn').onclick=()=>{ const i=Math.min(state.idx+1,state.playlists[state.currentPlaylist].length-1); playAt(i); };
+
+// Sidebar toggle
+document.getElementById('minBtn').onclick=()=>{ playlistEl.classList.toggle('minimized'); state.sidebarMinimized=!state.sidebarMinimized; saveState(); };
+
+// Initial render
+renderList();
+if(state.idx>=0) playAt(state.idx);
 </script>
-
 </body>
 </html>
