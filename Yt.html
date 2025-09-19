@@ -1,226 +1,290 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Liquid Glass YouTube Viewer</title>
+<title>Liquid Glass YouTube Viewer - Audio Reactive Blobs</title>
+<title>Liquid Glass YouTube Viewer - Audio Reactive Blobs + Settings</title>
 <style>
 :root {
-  --bg: #0f1115;
-  --panel: #161a22;
-  --panel-2: #1c2230;
-  --text: #f5f7fb;
-  --muted: #a7b0c0;
-  --brand: #ff33cc;
-  --radius: 22px;
-  --shadow: 0 25px 60px rgba(0, 0, 0, .7);
+--bg: #0f1115;
+@@ -51,7 +51,17 @@
+
+/* App UI */
+.app { position: relative; z-index: 1; display: grid; grid-template-rows: auto 1fr; gap: 20px; max-width: 1300px; margin: 0 auto; padding: 20px; }
+.bar { display: grid; grid-template-columns: 1fr auto auto auto auto auto auto auto auto; gap: 12px; align-items: center; background: var(--panel); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: blur(30px); }
+.bar { 
+  display: grid; 
+  grid-template-columns: 1fr repeat(12, auto); /* flexible room for controls */
+  gap: 12px; 
+  align-items: center; 
+  background: var(--panel); 
+  padding: 16px; 
+  border-radius: var(--radius); 
+  box-shadow: var(--shadow); 
+  backdrop-filter: blur(30px); 
 }
-[data-theme="light"] {
-  --bg: #f2f2f2;
-  --panel: #ffffff;
-  --panel-2: #ededed;
-  --text: #222;
-  --muted: #666;
-  --brand: #ff33cc;
+.input { display: flex; gap: 12px; align-items: center; background: var(--panel-2); border: 1px solid rgba(255,255,255,.08); padding: 12px 16px; border-radius: 20px; backdrop-filter: blur(35px); }
+.input input { flex: 1; border: 0; outline: none; background: transparent; color: var(--text); font-size: 16px; }
+.btn { border: 0; border-radius: 20px; padding: 12px 18px; background: var(--brand); color: #fff; font-weight: 700; cursor: pointer; transition: all 0.3s; }
+@@ -102,6 +112,34 @@
+.list.minimized { width:0 !important; opacity:0; pointer-events:none; }
+#toastContainer { position: fixed; top: 20px; right: 20px; z-index: 10; display: flex; flex-direction: column; align-items: flex-end; }
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
 }
-* { box-sizing: border-box }
-html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif; transition: all 0.3s; overflow: hidden; }
-body { 
-  background: linear-gradient(180deg, var(--bg), #0b0d12);
+.modal.hidden { display: none; }
+.modal-content {
+  background: var(--panel);
   color: var(--text);
+  padding: 24px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: 320px;
 }
-
-/* Glowing Blobs */
-#blobs {
-  position: fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
 }
-.blob {
-  position:absolute; width:42vmax; height:42vmax; border-radius:50%;
-  background: radial-gradient(circle at 50% 50%, rgba(255,51,204,.6), rgba(255,51,204,.25) 30%, transparent 70%);
-  filter: blur(80px);
-  transform: translate3d(0,0,0) scale(1);
-  will-change: transform, background;
+.modal-content label {
+  display: block;
+  margin: 8px 0;
 }
-
-/* App */
-.app { position:relative; z-index:1; display:grid; grid-template-rows:auto 1fr; gap:20px; max-width:1300px; margin:0 auto; padding:20px; }
-.bar { display:grid; grid-template-columns:1fr repeat(12, auto); gap:12px; align-items:center; background:var(--panel); padding:16px; border-radius:var(--radius); box-shadow:var(--shadow); backdrop-filter:blur(30px); }
-.input { display:flex; gap:12px; align-items:center; background:var(--panel-2); border:1px solid rgba(255,255,255,.08); padding:12px 16px; border-radius:20px; backdrop-filter:blur(35px); }
-.input input { flex:1; border:0; outline:none; background:transparent; color:var(--text); font-size:16px; }
-.btn { border:0; border-radius:20px; padding:12px 18px; background:var(--brand); color:#fff; font-weight:700; cursor:pointer; transition: all 0.3s; }
-.btn.ghost { background:transparent; color:var(--text); border:1px solid rgba(255,255,255,.12); }
-.btn:hover { transform: translateY(-1px) scale(1.05); box-shadow: 0 20px 60px rgba(255,51,204,.6); }
-select { border-radius:12px; padding:6px 12px; background:var(--panel-2); color:var(--text); border:1px solid rgba(255,255,255,.08); }
-
-.grid { display:grid; grid-template-columns:3fr auto; gap:20px; height:calc(100vh - 180px); transition:all 0.4s; }
-.player { background:#000; border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); position:relative; backdrop-filter:blur(25px); transition:all 0.5s; }
-.player #player { width:100%; height:100%; }
-.player .placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#8891a4; font-size:20px; }
-
-.list { background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); display:flex; flex-direction:column; min-height:0; backdrop-filter:blur(30px); width:320px; transition:width 0.4s ease, opacity 0.3s ease; }
-.list-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06); }
-.items { overflow:auto; padding:12px; flex:1; }
-.item { display:grid; grid-template-columns:140px 1fr auto; gap:12px; align-items:center; padding:12px; border-radius:16px; cursor:grab; }
-.item.active { background: rgba(255,51,204,.25); }
-.thumb { width:140px; height:80px; border-radius:16px; object-fit:cover; background:#0a0c12; }
-.title { font-weight:700; line-height:1.3; font-size:15px; }
-.x { opacity:.8; border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:20px; }
-.x:hover { opacity:1; transform:scale(1.1); }
-
-.modal { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; justify-content:center; align-items:center; z-index:20; }
-.modal.hidden { display:none; }
-.modal-content { background:var(--panel); color:var(--text); padding:24px; border-radius:var(--radius); box-shadow:var(--shadow); width:320px; }
-.modal-content h2 { margin-top:0; margin-bottom:16px; }
-.modal-content label { display:block; margin:8px 0; }
 
 @media (max-width:1024px){
-  .grid { grid-template-columns:1fr; grid-template-rows:1fr 320px; height:auto; }
-  .list { min-height:320px; width:100%; }
-}
-</style>
-</head>
-<body data-theme="dark">
-
-<div id="blobs">
-  <div class="blob" style="top:-10%; left:-10%"></div>
-  <div class="blob" style="top:20%; right:-15%"></div>
-  <div class="blob" style="bottom:-15%; left:10%"></div>
-</div>
-
-<div class="app">
-  <div class="bar">
-    <div class="input"><input id="url" placeholder="Paste YouTube URL or video ID" /></div>
-    <button class="btn" id="addBtn">Add</button>
-    <button class="btn ghost" id="pasteBtn">📋 Paste</button>
-    <button class="btn ghost" id="prevBtn">⟨ Prev</button>
-    <button class="btn ghost" id="nextBtn">Next ⟩</button>
-    <button class="btn ghost" id="minBtn">⇔</button>
-    <select id="playlistSelect"></select>
-    <button class="btn ghost" id="themeBtn">🌗</button>
+.grid { grid-template-columns:1fr; grid-template-rows:1fr 320px; height:auto; }
+.list { min-height:320px; width:100%; }
+@@ -131,6 +169,7 @@
+<button class="btn ghost" id="themeBtn">🌗</button>
+<button class="btn ghost" id="micBtn">🎤 Mic React</button>
+<button class="btn ghost" id="videoReactBtn">📺 Video React</button>
     <button class="btn ghost" id="settingsBtn">⚙ Settings</button>
-  </div>
-
-  <div class="grid">
-    <section class="player">
-      <div id="player"></div>
-      <div class="placeholder" id="placeholder">Add a video to start ▶</div>
-    </section>
-
-    <aside class="list" id="playlist">
-      <div class="list-header">Playlist</div>
-      <div class="items" id="items"></div>
-    </aside>
-  </div>
+<span id="reactModeLabel" class="off"><span class="dot"></span>(off)</span>
 </div>
+
+@@ -154,6 +193,29 @@
+</div>
+<div id="toastContainer"></div>
 
 <!-- Settings Modal -->
 <div id="settingsModal" class="modal hidden">
   <div class="modal-content">
     <h2>Settings</h2>
-    <label><input type="checkbox" id="autoPlayToggle"> Autoplay videos</label>
-    <label><input type="checkbox" id="autoNextToggle"> Auto-play next video</label>
-    <label>Default playlist: 
+    <label><input type="checkbox" id="autoPlayToggle"> Autoplay videos</label><br>
+    <label><input type="checkbox" id="autoNextToggle"> Auto-play next video</label><br>
+    <label>
+      Default playlist: 
       <select id="defaultPlaylistSelect"></select>
-    </label>
-    <label>Default react mode:
+    </label><br>
+    <label>
+      Default react mode: 
       <select id="defaultReactSelect">
         <option value="off">Off</option>
         <option value="mic">Mic</option>
         <option value="video">Video</option>
       </select>
-    </label>
-    <br><br>
+    </label><br><br>
     <button class="btn" id="saveSettingsBtn">Save</button>
     <button class="btn ghost" id="closeSettingsBtn">Close</button>
   </div>
 </div>
 
 <script>
-// State
-let state={playlists:{"Default":[]},currentPlaylist:"Default",idx:-1,settings:{autoplay:true,autoNext:true,defaultPlaylist:"Default",defaultReact:"off"}};
+// ======== Glowing Blobs + Audio-reactive Dot =========
+const blobs = [...document.querySelectorAll('.blob')];
+@@ -199,7 +261,7 @@
+dot.style.boxShadow=`0 0 ${6+bass/20}px currentColor`;
+} else if(reactMode==="video" && player && player.getCurrentTime){
+const tt=player.getCurrentTime();
+    const bass=(Math.sin(tt*6)+1)*128; // 0..255
+    const bass=(Math.sin(tt*6)+1)*128; // 0..255 fake react for demo
+const s=1+(bass/255)*1.2;
+dot.style.transform=`scale(${s})`;
+dot.style.boxShadow=`0 0 ${6+bass/20}px currentColor`;
+@@ -229,23 +291,28 @@
+}
+
+document.getElementById('micBtn').onclick=async()=>{
+  if(reactMode==="mic"){ reactMode="off"; analyser=null; updateReactLabel(); return; }
+  const stream=await navigator.mediaDevices.getUserMedia({ audio:true });
+  const ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  analyser=ctx.createAnalyser();
+  analyser.fftSize=512;
+  dataArray=new Uint8Array(analyser.frequencyBinCount);
+  src.connect(analyser);
+  reactMode="mic"; updateReactLabel();
+  if(reactMode==="mic"){ reactMode="off"; analyser=null; updateReactLabel(); saveState(); return; }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({ audio:true });
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(stream);
+    analyser=ctx.createAnalyser();
+    analyser.fftSize=512;
+    dataArray=new Uint8Array(analyser.frequencyBinCount);
+    src.connect(analyser);
+    reactMode="mic"; 
+    state.settings.defaultReact="mic";
+    updateReactLabel(); saveState();
+  }catch(e){ alert('Mic access denied'); }
+};
+document.getElementById('videoReactBtn').onclick=()=>{
+reactMode = (reactMode==="video") ? "off" : "video";
+  updateReactLabel();
+  state.settings.defaultReact=reactMode;
+  updateReactLabel(); saveState();
+};
+
+// ======== App / Playlist / Player ==========
+const state={playlists:{"Default":[]},currentPlaylist:"Default",idx:-1,sidebarMinimized:false,positions:{}};
+const state={playlists:{"Default":[]},currentPlaylist:"Default",idx:-1,sidebarMinimized:false,positions:{},settings:{autoplay:true,autoNext:true,defaultPlaylist:"Default",defaultReact:"off"}};
 const itemsEl=document.getElementById('items');
 const urlEl=document.getElementById('url');
-const playlistSelect=document.getElementById('playlistSelect');
 const placeholder=document.getElementById('placeholder');
-let player, ytReady=false;
-
-// Load/save state
+@@ -266,7 +333,26 @@
 function saveState(){ localStorage.setItem('ytState', JSON.stringify(state)); }
 function loadState(){
-  const s=localStorage.getItem('ytState');
-  if(s) state=JSON.parse(s);
-  // Theme
-  const savedTheme=localStorage.getItem('theme'); if(savedTheme) document.body.dataset.theme=savedTheme;
-  renderPlaylistSelect(); renderList();
-  if(state.idx>=0) playAt(state.idx);
-}
-function renderPlaylistSelect(){
-  playlistSelect.innerHTML='';
-  for(const name in state.playlists){
-    const opt=document.createElement('option');
-    opt.value=name; opt.textContent=name;
-    if(name===state.currentPlaylist) opt.selected=true;
-    playlistSelect.appendChild(opt);
+const s=localStorage.getItem('ytState');
+  if(s) Object.assign(state,JSON.parse(s));
+  if(s) {
+    const parsed=JSON.parse(s);
+    // deep merge minimal
+    Object.assign(state, parsed);
+    if(!state.settings) state.settings={autoplay:true,autoNext:true,defaultPlaylist:"Default",defaultReact:"off"};
+  } else {
+    // seed demo
+    state.playlists.Default=[{id:"dQw4w9WgXcQ",title:"Never Gonna Give You Up",start:0},{id:"9bZkp7q19f0",title:"Gangnam Style",start:0}];
   }
-}
-playlistSelect.onchange=function(){ state.currentPlaylist=this.value; state.idx=-1; renderList(); saveState(); }
 
-// Add video
-document.getElementById('addBtn').onclick=()=>{ addFromInput(); };
-document.getElementById('pasteBtn').onclick=async()=>{
-  try{ const text=await navigator.clipboard.readText(); if(!text.trim()) return alert('Clipboard empty'); urlEl.value=text; addFromInput(); }
-  catch{ alert('Clipboard access denied'); }
+  // theme
+  const savedTheme=localStorage.getItem('theme'); if(savedTheme) document.body.dataset.theme=savedTheme;
+
+  // settings application
+  if(state.settings.defaultPlaylist && state.playlists[state.settings.defaultPlaylist]){
+    state.currentPlaylist = state.settings.defaultPlaylist;
+  }
+  reactMode = state.settings.defaultReact || "off";
+  updateReactLabel();
+
+renderPlaylistSelect();
+renderList();
+playlistEl.classList.toggle('minimized', state.sidebarMinimized);
+@@ -281,7 +367,7 @@
+playlistSelect.appendChild(opt);
+}
+}
+playlistSelect.onchange=function(){ state.currentPlaylist=this.value; state.idx=-1; renderList(); notify("Switched to: "+state.currentPlaylist); }
+playlistSelect.onchange=function(){ state.currentPlaylist=this.value; state.idx=-1; renderList(); notify("Switched to: "+state.currentPlaylist); saveState(); }
+
+// Buttons
+document.getElementById('newPlaylistBtn').onclick=function(){
+@@ -300,11 +386,10 @@
+const newTheme=document.body.dataset.theme==="dark"?"light":"dark";
+document.body.dataset.theme=newTheme;
+localStorage.setItem('theme',newTheme);
+  notify("Theme switched");
+  notify("Theme: "+newTheme);
 };
-function addFromInput(){
-  const raw=urlEl.value.trim(); if(!raw) return;
-  const id=raw.includes('youtu')? (raw.split('v=')[1]?.split('&')[0]||raw.split('/').pop()): raw;
-  state.playlists[state.currentPlaylist].push({id,title:id});
-  urlEl.value=''; renderList(); saveState();
-  if(state.idx===-1) playAt(0);
+const savedTheme=localStorage.getItem('theme'); if(savedTheme) document.body.dataset.theme=savedTheme;
+document.getElementById('minBtn').onclick=()=>{ playlistEl.classList.toggle('minimized'); state.sidebarMinimized=playlistEl.classList.contains('minimized'); saveState(); };
+document.getElementById('shuffleBtn').onclick=()=>{ shuffle(state.playlists[state.currentPlaylist]); renderList(); notify("Playlist shuffled"); };
+document.getElementById('shuffleBtn').onclick=()=>{ shuffle(state.playlists[state.currentPlaylist]); renderList(); notify("Playlist shuffled"); saveState(); };
+document.getElementById('clearBtn').onclick=()=>{ state.playlists[state.currentPlaylist]=[]; state.idx=-1; renderList(); if(player) player.stopVideo(); placeholder.style.display='grid'; notify("Playlist cleared"); saveState(); };
+
+document.getElementById('addBtn').onclick=addFromInput;
+@@ -363,8 +448,7 @@
+const list=state.playlists[state.currentPlaylist]; if(!list[i]) return;
+state.idx=i;
+const v=list[i];
+  if(!player) initPlayer(v.id, v.start||0);
+  else player.loadVideoById({videoId:v.id, startSeconds: v.start||0});
+  ensurePlayer(v.id, v.start||0);
+placeholder.style.display='none';
+renderList(); saveState();
+}
+@@ -432,25 +516,104 @@
+return sec || 0;
 }
 
-// Render playlist
-function renderList(){
-  const list=state.playlists[state.currentPlaylist]||[];
-  itemsEl.innerHTML='';
-  list.forEach((v,i)=>{
-    const row=document.createElement('div'); row.className='item'+(i===state.idx?' active':''); row.dataset.index=i; row.onclick=()=>playAt(i);
-    row.innerHTML=`<img class="thumb" src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg" /><div><div class="title">${v.title}</div></div><button class="x" onclick="event.stopPropagation(); removeAt(${i})">×</button>`;
-    itemsEl.appendChild(row);
+// ======= YouTube Player =========
+function initPlayer(id, start=0){
+  const tag = document.createElement('script');
+  tag.src="https://www.youtube.com/iframe_api";
+  document.body.appendChild(tag);
+// ======= YouTube Player load/init =========
+let ytReady = false;
+function ensurePlayer(id, start=0){
+  // if player exists, just (auto)play or cue according to settings
+  if(player){
+    player.loadVideoById({videoId:id, startSeconds:start});
+    if(state.settings.autoplay){
+      // Some browsers require a user gesture; if blocked, it will stay cued.
+      player.playVideo?.();
+    } else {
+      // load then pause to respect no-autoplay
+      setTimeout(()=>player.pauseVideo?.(), 50);
+    }
+    return;
+  }
+
+  // If API already loaded & ready
+  if(ytReady && window.YT && YT.Player){
+    createPlayer(id, start);
+    return;
+  }
+
+  // If API script not yet injected, inject once
+  if(!document.querySelector('script[src*="youtube.com/iframe_api"]')){
+    const tag = document.createElement('script');
+    tag.src="https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
+  }
+  // Define global callback (runs once)
+window.onYouTubeIframeAPIReady = ()=>{
+    player = new YT.Player('player', {
+      height: '100%',
+      width: '100%',
+      videoId: id,
+      playerVars: { autoplay:1, controls:1, modestbranding:1, rel:0, playsinline:1, start },
+      events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+    });
+    ytReady = true;
+    createPlayer(id, start);
+};
+}
+function onPlayerReady(event){ event.target.playVideo(); }
+function onPlayerStateChange(event){ if(event.data===YT.PlayerState.ENDED) next(); }
+
+// Initialize
+function createPlayer(id, start){
+  player = new YT.Player('player', {
+    height: '100%',
+    width: '100%',
+    videoId: id,
+    playerVars: { 
+      autoplay: state.settings.autoplay ? 1 : 0, 
+      controls: 1, modestbranding: 1, rel: 0, playsinline: 1, start 
+    },
+    events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
   });
 }
-function removeAt(i){ state.playlists[state.currentPlaylist].splice(i,1); if(i===state.idx) state.idx=-1; renderList(); saveState(); }
-
-// Play video (reload every time)
-function playAt(i){
-  const list=state.playlists[state.currentPlaylist]; if(!list[i]) return;
-  state.idx=i; 
-  const v=list[i];
-  if(player) player.destroy();
-  if(ytReady && window.YT && YT.Player){ createPlayer(v.id); return; }
-  if(!document.querySelector('script[src*="youtube.com/iframe_api"]')){
-    const tag=document.createElement('script'); tag.src="https://www.youtube.com/iframe_api"; document.body.appendChild(tag);
+function onPlayerReady(event){ 
+  if(state.settings.autoplay){
+    // May still be blocked by policy without gesture
+    try{ event.target.playVideo(); }catch{}
   }
-  window.onYouTubeIframeAPIReady=()=>{ ytReady=true; createPlayer(v.id); };
-  renderList();
-  placeholder.style.display='none';
-  saveState();
 }
-function createPlayer(id){
-  player=new YT.Player('player',{videoId:id,height:'100%',width:'100%',playerVars:{autoplay:state.settings.autoplay?1:0,controls:1}});
+function onPlayerStateChange(event){ 
+  if(event.data===YT.PlayerState.ENDED && state.settings.autoNext) next(); 
 }
 
-// Next/Prev
-document.getElementById('nextBtn').onclick=()=>playAt(state.idx+1);
-document.getElementById('prevBtn').onclick=()=>playAt(state.idx-1);
-document.getElementById('minBtn').onclick=()=>{ document.getElementById('playlist').classList.toggle('minimized'); };
-document.getElementById('themeBtn').onclick=()=>{
-  const newTheme=document.body.dataset.theme==="dark"?"light":"dark";
-  document.body.dataset.theme=newTheme;
-  localStorage.setItem('theme',newTheme);
-};
-
-// Settings modal
+// ====== Settings ======
 const settingsBtn = document.getElementById("settingsBtn");
 const modal = document.getElementById("settingsModal");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
@@ -230,32 +294,36 @@ const autoNextToggle = document.getElementById("autoNextToggle");
 const defaultPlaylistSelect = document.getElementById("defaultPlaylistSelect");
 const defaultReactSelect = document.getElementById("defaultReactSelect");
 
-settingsBtn.onclick=()=>{
-  autoPlayToggle.checked=!!state.settings.autoplay;
-  autoNextToggle.checked=!!state.settings.autoNext;
-  defaultReactSelect.value=state.settings.defaultReact||"off";
-  defaultPlaylistSelect.innerHTML='';
+function openSettings(){
+  autoPlayToggle.checked = !!state.settings.autoplay;
+  autoNextToggle.checked = !!state.settings.autoNext;
+  defaultReactSelect.value = state.settings.defaultReact || "off";
+  
+  defaultPlaylistSelect.innerHTML = "";
   for(const name in state.playlists){
-    const opt=document.createElement('option');
+    const opt=document.createElement("option");
     opt.value=name; opt.textContent=name;
     if(name===state.settings.defaultPlaylist) opt.selected=true;
     defaultPlaylistSelect.appendChild(opt);
   }
-  modal.classList.remove('hidden');
-};
-closeSettingsBtn.onclick=()=>modal.classList.add('hidden');
-saveSettingsBtn.onclick=()=>{
-  state.settings.autoplay=autoPlayToggle.checked;
-  state.settings.autoNext=autoNextToggle.checked;
-  state.settings.defaultPlaylist=defaultPlaylistSelect.value;
-  state.settings.defaultReact=defaultReactSelect.value;
-  modal.classList.add('hidden');
+  modal.classList.remove("hidden");
+}
+function closeSettings(){ modal.classList.add("hidden"); }
+function saveSettings(){
+  state.settings.autoplay = autoPlayToggle.checked;
+  state.settings.autoNext = autoNextToggle.checked;
+  state.settings.defaultPlaylist = defaultPlaylistSelect.value;
+  state.settings.defaultReact = defaultReactSelect.value;
+  reactMode = state.settings.defaultReact;
+  updateReactLabel();
   saveState();
-};
+  notify("Settings saved");
+  closeSettings();
+}
+settingsBtn.onclick=openSettings;
+closeSettingsBtn.onclick=closeSettings;
+saveSettingsBtn.onclick=saveSettings;
 
-// Init
+// ======= Initialize =======
 loadState();
 </script>
-<script src="https://www.youtube.com/iframe_api"></script>
-</body>
-</html>
